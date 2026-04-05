@@ -10,12 +10,14 @@ class SidebarItem extends vscode.TreeItem {
       command?: vscode.Command;
       collapsibleState?: vscode.TreeItemCollapsibleState;
       contextValue?: string;
+      tooltip?: string;
     }
   ) {
     super(label, options?.collapsibleState ?? vscode.TreeItemCollapsibleState.None);
     this.description = options?.description;
     this.command = options?.command;
     this.contextValue = options?.contextValue;
+    this.tooltip = options?.tooltip;
   }
 }
 
@@ -51,12 +53,12 @@ export class OpsSidebarProvider implements vscode.TreeDataProvider<SidebarItem> 
 
       return Promise.resolve(
         tools.slice(0, 30).map(tool => new SidebarItem(tool.name, {
-          description: tool.description ?? 'No description from MCP server.',
           command: {
             command: 'alertMcp.showToolDescription',
             title: 'Show Tool Description',
             arguments: [tool.name, tool.description ?? 'No description from MCP server.']
-          }
+          },
+          tooltip: tool.description ?? 'No description from MCP server.'
         }))
       );
     }

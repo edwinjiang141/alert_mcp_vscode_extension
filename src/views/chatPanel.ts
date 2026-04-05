@@ -163,11 +163,11 @@ export class ChatPanel {
 
     function redactSensitiveText(raw) {
       let text = String(raw || '');
-      text = text.replace(/(password\s*[=:]\s*)([^\s,\n]+)/gi, '$1***');
-      text = text.replace(/(密码\s*[：:\=]\s*)([^\s,\n]+)/g, '$1***');
-      text = text.replace(/(username\s*[=:]\s*)([^\s,\n]+)/gi, '$1***');
-      text = text.replace(/(用户名\s*[：:\=]\s*)([^\s,\n]+)/g, '$1***');
-      text = text.replace(/(https?:\/\/[^\s]*\/em\/api)/gi, '[OEM_API_REDACTED]');
+      text = text.replace(/(password\\s*[=:]\\s*)([^\\s,\\n]+)/gi, '$1***');
+      text = text.replace(/(密码\\s*[：:\=]\\s*)([^\\s,\\n]+)/g, '$1***');
+      text = text.replace(/(username\\s*[=:]\\s*)([^\\s,\\n]+)/gi, '$1***');
+      text = text.replace(/(用户名\\s*[：:\=]\\s*)([^\\s,\\n]+)/g, '$1***');
+      text = text.replace(/(https?:\\/\\/[^\\s]*\\/em\\/api)/gi, '[OEM_API_REDACTED]');
       return text;
     }
 

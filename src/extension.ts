@@ -102,8 +102,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('alertMcp.askAssistant', askAssistant),
     vscode.commands.registerCommand('alertMcp.showToolDescription', async (toolName: string, toolDescription: string) => {
+      const safeDescription = toolDescription || 'No description from MCP server.';
+      vscode.window.showInformationMessage(`${toolName}: ${safeDescription}`);
       const currentPanel = openPanel();
-      currentPanel.postInfo(`Tool: ${toolName}\n${toolDescription}`);
+      currentPanel.postInfo(`Tool: ${toolName}\n${safeDescription}`);
     }),
     vscode.commands.registerCommand('alertMcp.openSettings', async () => {
       await SettingsPanel.createOrShow(context, settingsService, secrets);
