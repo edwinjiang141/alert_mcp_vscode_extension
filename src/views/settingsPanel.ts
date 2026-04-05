@@ -33,7 +33,7 @@ export class SettingsPanel {
 
     const panel = vscode.window.createWebviewPanel(
       'alertMcpSettings',
-      'Alert MCP Settings',
+      'OEM Assistant Settings',
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -127,7 +127,7 @@ export class SettingsPanel {
     }
 
     await this.refresh(settingsService, secrets);
-    vscode.window.showInformationMessage('Alert MCP settings saved.');
+    vscode.window.showInformationMessage('OEM Assistant settings saved.');
   }
 
   private renderHtml(): string {
@@ -136,7 +136,7 @@ export class SettingsPanel {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Alert MCP Settings</title>
+  <title>OEM Assistant Settings</title>
   <style>
     body { font-family: var(--vscode-font-family); color: var(--vscode-editor-foreground); padding: 16px; }
     h2 { margin-bottom: 12px; }
@@ -149,7 +149,7 @@ export class SettingsPanel {
   </style>
 </head>
 <body>
-  <h2>Alert MCP MVP Settings</h2>
+  <h2>OEM Assistant MVP Settings</h2>
   <div class="grid">
     <label class="field full">MCP SSE 地址
       <input id="mcpServerUrl" placeholder="http://127.0.0.1:3000/sse" />

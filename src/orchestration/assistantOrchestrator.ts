@@ -10,6 +10,10 @@ import { SecretStorageService } from '../services/secretStorageService';
 import { OpenAiCompatibleLlmService } from '../services/llm/openAiCompatibleLlmService';
 import { McpClientService } from '../services/mcp/mcpClientService';
 
+interface AskOptions {
+  preferredTools?: string[];
+}
+
 export class AssistantOrchestrator {
   constructor(
     private readonly settings: ExtensionSettings,
@@ -18,7 +22,7 @@ export class AssistantOrchestrator {
     private readonly output: vscode.OutputChannel
   ) {}
 
-  async ask(userText: string, conversationContext: ChatTurn[] = []): Promise<AssistantResult> {
+  async ask(userText: string, conversationContext: ChatTurn[] = [], options: AskOptions = {}): Promise<AssistantResult> {
     if (!this.mcp.isConnected()) {
       throw new Error('MCP server is not connected. Please connect first.');
     }
@@ -27,10 +31,16 @@ export class AssistantOrchestrator {
       throw new Error('Copilot mode is reserved for a later version. Use openai-compatible for the MVP.');
     }
 
-    const tools = this.mcp.getCachedTools();
+    const allTools = this.mcp.getCachedTools();
+    const allToolNames = allTools.map(tool => tool.name);
+    const preferredToolNames = this.normalizePreferredTools(options.preferredTools, allToolNames);
+    const activeTools = preferredToolNames.length > 0
+      ? allTools.filter(tool => preferredToolNames.includes(tool.name))
+      : allTools;
+
     const oemPassword = await this.secrets.getOemPassword();
 
-    const directLoginResult = await this.tryHandleDirectOemLogin(userText, tools.map(tool => tool.name), {
+    const directLoginResult = await this.tryHandleDirectOemLogin(userText, allToolNames, {
       oemBaseUrl: this.settings.oem.baseUrl,
       oemUsername: this.settings.oem.username,
       oemPassword
@@ -42,7 +52,7 @@ export class AssistantOrchestrator {
 
     const apiKey = await this.secrets.getLlmApiKey();
     if (!apiKey) {
-      throw new Error('LLM API key is not configured. Run: Alert MCP: Set LLM API Key');
+      throw new Error('LLM API key is not configured. Run: OEM Assistant: Set LLM API Key');
     }
 
     const llm = new OpenAiCompatibleLlmService(
@@ -52,7 +62,7 @@ export class AssistantOrchestrator {
       this.settings.llm.temperature
     );
 
-    const toolSpecs: OpenAiCompatibleTool[] = tools.map(tool => ({
+    const toolSpecs: OpenAiCompatibleTool[] = activeTools.map(tool => ({
       type: 'function',
       function: {
         name: tool.name,
@@ -65,6 +75,8 @@ export class AssistantOrchestrator {
     }));
 
     const hasOemCredentials = Boolean(this.settings.oem.baseUrl && this.settings.oem.username && oemPassword);
+    const forceAskOps = this.shouldForceAskOps(userText, allToolNames);
+    const askOpsExists = allToolNames.includes('ask_ops');
 
     const systemPrompt = [
       'You are a focused alert operations assistant.',
@@ -74,10 +86,19 @@ export class AssistantOrchestrator {
       hasOemCredentials
         ? 'OEM credentials are already configured in extension settings. For OEM login requests, call login tool directly without asking credentials again.'
         : 'OEM credentials are incomplete. If login is requested, ask user to complete OEM settings first.',
+      preferredToolNames.length > 0
+        ? `User explicitly selected tools: ${preferredToolNames.join(', ')}. Only use these tools unless absolutely impossible.`
+        : '',
+      forceAskOps && askOpsExists
+        ? 'This request is an alert diagnosis request. You MUST call ask_ops before providing any conclusion.'
+        : '',
+      askOpsExists
+        ? 'If ask_ops result says SOP is not found (or equivalent), do not generate your own diagnosis. Reply that SOP is missing and ask user to完善知识库/SOP.'
+        : '',
       this.mcp.getInstructions()
     ].filter(Boolean).join('\n\n');
 
-    const shouldForceOemLogin = this.shouldForceOemLoginFirst(userText, tools.map(tool => tool.name));
+    const shouldForceOemLogin = this.shouldForceOemLoginFirst(userText, allToolNames);
     const normalizedUserText = shouldForceOemLogin
       ? `${userText}\n\n请先调用 OEM 登录工具完成会话建立，然后再继续后续任务，不要重复要求用户输入 OEM 账号密码。`
       : userText;
@@ -100,13 +121,20 @@ export class AssistantOrchestrator {
       });
 
       if (!llmReply.tool_calls || llmReply.tool_calls.length === 0) {
+        if (forceAskOps && askOpsExists && !this.hasAskOpsExecution(steps)) {
+          const detail = '该问题属于告警诊断，必须先调用 ask_ops 工具。请在提问中显式使用 @ask_ops 后重试。';
+          steps.push({ type: 'error', title: 'Missing required tool call', detail });
+          return { finalText: detail, steps };
+        }
+
+        const reply = this.redactSensitiveText(llmReply.content ?? '(empty response)');
         steps.push({
           type: 'info',
           title: 'Final answer',
-          detail: this.redactSensitiveText(llmReply.content ?? '(empty response)')
+          detail: reply
         });
         return {
-          finalText: this.redactSensitiveText(llmReply.content ?? '(empty response)'),
+          finalText: reply,
           steps
         };
       }
@@ -135,17 +163,31 @@ export class AssistantOrchestrator {
         });
 
         const toolResult = await this.mcp.callTool(toolName, resolvedArgs);
+        const redactedToolResult = this.redactSensitiveText(toolResult);
         steps.push({
           type: 'tool-result',
           title: `Tool result: ${toolName}`,
-          detail: this.redactSensitiveText(toolResult)
+          detail: redactedToolResult
         });
+
+        if (toolName === 'ask_ops' && this.indicatesNoSop(toolResult)) {
+          const noSopMessage = '未找到匹配的 SOP，已停止自动解答。请先补充/更新 SOP 后再重试。';
+          steps.push({
+            type: 'info',
+            title: 'SOP not found',
+            detail: noSopMessage
+          });
+          return {
+            finalText: noSopMessage,
+            steps
+          };
+        }
 
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
           name: toolName,
-          content: this.redactSensitiveText(toolResult)
+          content: redactedToolResult
         });
       }
     }
@@ -161,6 +203,45 @@ export class AssistantOrchestrator {
       finalText: overflowMessage,
       steps
     };
+  }
+
+  private normalizePreferredTools(preferredTools: string[] | undefined, allTools: string[]): string[] {
+    if (!preferredTools?.length) {
+      return [];
+    }
+    const allowed = new Set(allTools);
+    return preferredTools
+      .map(name => name.trim())
+      .filter(Boolean)
+      .filter(name => allowed.has(name));
+  }
+
+  private shouldForceAskOps(userText: string, toolNames: string[]): boolean {
+    if (!toolNames.includes('ask_ops')) {
+      return false;
+    }
+    const normalized = userText.toLowerCase();
+    const hasAlertIntent =
+      normalized.includes('告警') ||
+      normalized.includes('alert') ||
+      normalized.includes('cpu') ||
+      normalized.includes('主机') ||
+      normalized.includes('诊断');
+
+    return hasAlertIntent;
+  }
+
+  private hasAskOpsExecution(steps: ExecutionStep[]): boolean {
+    return steps.some(step => step.type === 'tool-call' && step.title.includes('ask_ops'));
+  }
+
+  private indicatesNoSop(toolResult: string): boolean {
+    const normalized = toolResult.toLowerCase();
+    return normalized.includes('no sop')
+      || normalized.includes('sop not found')
+      || normalized.includes('未找到sop')
+      || normalized.includes('没有sop')
+      || normalized.includes('未匹配到sop');
   }
 
   private shouldForceOemLoginFirst(userText: string, toolNames: string[]): boolean {
@@ -206,7 +287,7 @@ export class AssistantOrchestrator {
 
     if (!creds.oemBaseUrl || !creds.oemUsername || !creds.oemPassword) {
       return {
-        finalText: 'OEM 凭据未配置完整。请在 Alert MCP Settings 中填写 OEM 地址、账号和密码后重试。',
+        finalText: 'OEM 凭据未配置完整。请在 OEM Assistant Settings 中填写 OEM 地址、账号和密码后重试。',
         steps: []
       };
     }

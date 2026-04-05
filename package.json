@@ -1,7 +1,7 @@
 {
   "name": "alert-mcp-assistant",
-  "displayName": "Alert MCP Assistant",
-  "description": "A focused VS Code extension for alert query and handling with MCP + LLM.",
+  "displayName": "OEM Assistant",
+  "description": "A focused VS Code extension for OEM operations with MCP + LLM.",
   "version": "0.1.0",
   "publisher": "local-dev",
   "license": "MIT",
@@ -24,43 +24,43 @@
     "commands": [
       {
         "command": "alertMcp.openConsole",
-        "title": "Alert MCP: Open Console"
+        "title": "OEM Assistant: Open Console"
       },
       {
         "command": "alertMcp.connectMcp",
-        "title": "Alert MCP: Connect MCP Server"
+        "title": "OEM Assistant: Connect MCP Server"
       },
       {
         "command": "alertMcp.askAssistant",
-        "title": "Alert MCP: Ask Assistant"
+        "title": "OEM Assistant: Ask Assistant"
       },
       {
         "command": "alertMcp.setLlmApiKey",
-        "title": "Alert MCP: Set LLM API Key"
+        "title": "OEM Assistant: Set LLM API Key"
       },
       {
         "command": "alertMcp.setMcpBearerToken",
-        "title": "Alert MCP: Set MCP Bearer Token"
+        "title": "OEM Assistant: Set MCP Bearer Token"
       },
       {
         "command": "alertMcp.refreshSidebar",
-        "title": "Alert MCP: Refresh Sidebar"
+        "title": "OEM Assistant: Refresh Sidebar"
       },
       {
         "command": "alertMcp.disconnectMcp",
-        "title": "Alert MCP: Disconnect MCP Server"
+        "title": "OEM Assistant: Disconnect MCP Server"
       },
       {
         "command": "alertMcp.openSettings",
-        "title": "Alert MCP: Open Settings"
+        "title": "OEM Assistant: Open Settings"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "alertMcp",
-          "title": "Alert MCP",
-          "icon": "media/alert.svg"
+          "title": "OEM Assistant",
+          "icon": "media/oem-assistant.svg"
         }
       ]
     },
@@ -92,7 +92,7 @@
       ]
     },
     "configuration": {
-      "title": "Alert MCP Assistant",
+      "title": "OEM Assistant",
       "properties": {
         "alertMcp.mcp.serverUrl": {
           "type": "string",

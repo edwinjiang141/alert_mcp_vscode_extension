@@ -9,8 +9,13 @@ import { OpsSidebarProvider } from './views/opsSidebarProvider';
 import { SettingsPanel } from './views/settingsPanel';
 import type { ChatTurn } from './types/appTypes';
 
+interface AskMessagePayload {
+  question: string;
+  preferredTools?: string[];
+}
+
 export function activate(context: vscode.ExtensionContext): void {
-  const output = vscode.window.createOutputChannel('Alert MCP Assistant');
+  const output = vscode.window.createOutputChannel('OEM Assistant');
   const settingsService = new SettingsService();
   const secrets = new SecretStorageService(context);
   const mcpService = new McpClientService(output, secrets);
@@ -26,7 +31,6 @@ export function activate(context: vscode.ExtensionContext): void {
   const sessionContext: ChatTurn[] = [];
   const MAX_SESSION_CONTEXT_CHARS = 128 * 1024;
 
-
   const trimSessionContext = (): void => {
     let total = sessionContext.reduce((sum, turn) => sum + turn.content.length, 0);
     while (total > MAX_SESSION_CONTEXT_CHARS && sessionContext.length > 2) {
@@ -38,6 +42,18 @@ export function activate(context: vscode.ExtensionContext): void {
   const pushSessionTurn = (turn: ChatTurn): void => {
     sessionContext.push(turn);
     trimSessionContext();
+  };
+
+  const syncPanelToolCatalog = (): void => {
+    if (!panel) {
+      return;
+    }
+    panel.postToolCatalog(
+      mcpService.getCachedTools().map(tool => ({
+        name: tool.name,
+        description: tool.description ?? 'No description from MCP server.'
+      }))
+    );
   };
 
   const connectMcp = async (): Promise<void> => {
@@ -53,15 +69,21 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     sidebar.refresh();
+    syncPanelToolCatalog();
     openPanel().postInfo(`MCP connected: ${mcpService.getConnectedUrl() ?? settings.mcp.serverUrl}`);
     vscode.window.showInformationMessage('MCP server connected.');
   };
 
-  const askAssistant = async (presetQuestion?: string): Promise<void> => {
+  const askAssistant = async (payload?: string | AskMessagePayload): Promise<void> => {
     const currentPanel = openPanel();
-    const userQuestion = presetQuestion ?? await vscode.window.showInputBox({
+
+    const parsedPayload: AskMessagePayload | undefined = typeof payload === 'string'
+      ? { question: payload }
+      : payload;
+
+    const userQuestion = parsedPayload?.question ?? await vscode.window.showInputBox({
       prompt: 'Ask the alert assistant',
-      placeHolder: '例如：查询最近2小时所有P1告警，并给出处置建议'
+      placeHolder: '例如：@ask_ops 查询最近2小时所有P1告警，并给出处置建议'
     });
 
     if (!userQuestion) {
@@ -77,7 +99,9 @@ export function activate(context: vscode.ExtensionContext): void {
           location: vscode.ProgressLocation.Notification,
           title: 'Running alert assistant...'
         },
-        async () => orchestrator.ask(userQuestion, sessionContext)
+        async () => orchestrator.ask(userQuestion, sessionContext, {
+          preferredTools: parsedPayload?.preferredTools ?? []
+        })
       );
 
       currentPanel.postAssistantResult(userQuestion, result);
@@ -105,6 +129,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     });
     context.subscriptions.push(panelMessageDisposable);
+    syncPanelToolCatalog();
 
     return panel;
   };
@@ -118,6 +143,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await mcpService.disconnect();
       sessionContext.length = 0;
       sidebar.refresh();
+      syncPanelToolCatalog();
       vscode.window.showInformationMessage('MCP server disconnected.');
     }),
     vscode.commands.registerCommand('alertMcp.askAssistant', askAssistant),
@@ -141,6 +167,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await mcpService.refreshTools();
       }
       sidebar.refresh();
+      syncPanelToolCatalog();
     }),
     vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration('alertMcp')) {
