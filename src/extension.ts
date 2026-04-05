@@ -75,18 +75,17 @@ export function activate(context: vscode.ExtensionContext): void {
   const openPanel = (): ChatPanel => {
     panel = ChatPanel.createOrShow(context);
 
-    if (!panelMessageDisposable) {
-      panelMessageDisposable = panel.onDidReceiveMessage(async message => {
-        if (message.type === 'connect') {
-          await connectMcp();
-          return;
-        }
-        if (message.type === 'ask') {
-          await askAssistant(message.payload);
-        }
-      });
-      context.subscriptions.push(panelMessageDisposable);
-    }
+    panelMessageDisposable?.dispose();
+    panelMessageDisposable = panel.onDidReceiveMessage(async message => {
+      if (message.type === 'connect') {
+        await connectMcp();
+        return;
+      }
+      if (message.type === 'ask') {
+        await askAssistant(message.payload);
+      }
+    });
+    context.subscriptions.push(panelMessageDisposable);
 
     return panel;
   };

@@ -51,7 +51,11 @@ export class OpsSidebarProvider implements vscode.TreeDataProvider<SidebarItem> 
         command: 'alertMcp.openSettings',
         title: 'Open Settings'
       }),
-      ...tools.slice(0, 15).map(tool => new SidebarItem(`tool: ${tool.name}`, tool.description ?? ''))
+      ...tools.slice(0, 15).map(tool => new SidebarItem(`tool: ${tool.name}`, tool.description ?? '', {
+        command: 'alertMcp.askAssistant',
+        title: 'Ask with Tool',
+        arguments: [`请调用工具 ${tool.name}，并基于返回结果给出处置建议。`]
+      }))
     ]);
   }
 }
