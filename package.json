@@ -1,7 +1,7 @@
 {
   "name": "alert-mcp-assistant",
-  "displayName": "Alert MCP Assistant",
-  "description": "A focused VS Code extension for alert query and handling with MCP + LLM.",
+  "displayName": "OEM Assistant",
+  "description": "A focused VS Code extension for OEM operations with MCP + LLM.",
   "version": "0.1.0",
   "publisher": "local-dev",
   "license": "MIT",
@@ -16,46 +16,51 @@
     "onCommand:alertMcp.openConsole",
     "onCommand:alertMcp.connectMcp",
     "onCommand:alertMcp.askAssistant",
-    "onView:alertMcp.sidebar"
+    "onView:alertMcp.sidebar",
+    "onCommand:alertMcp.openSettings"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "alertMcp.openConsole",
-        "title": "Alert MCP: Open Console"
+        "title": "OEM Assistant: Open Console"
       },
       {
         "command": "alertMcp.connectMcp",
-        "title": "Alert MCP: Connect MCP Server"
+        "title": "OEM Assistant: Connect MCP Server"
       },
       {
         "command": "alertMcp.askAssistant",
-        "title": "Alert MCP: Ask Assistant"
+        "title": "OEM Assistant: Ask Assistant"
       },
       {
         "command": "alertMcp.setLlmApiKey",
-        "title": "Alert MCP: Set LLM API Key"
+        "title": "OEM Assistant: Set LLM API Key"
       },
       {
         "command": "alertMcp.setMcpBearerToken",
-        "title": "Alert MCP: Set MCP Bearer Token"
+        "title": "OEM Assistant: Set MCP Bearer Token"
       },
       {
         "command": "alertMcp.refreshSidebar",
-        "title": "Alert MCP: Refresh Sidebar"
+        "title": "OEM Assistant: Refresh Sidebar"
       },
       {
         "command": "alertMcp.disconnectMcp",
-        "title": "Alert MCP: Disconnect MCP Server"
+        "title": "OEM Assistant: Disconnect MCP Server"
+      },
+      {
+        "command": "alertMcp.openSettings",
+        "title": "OEM Assistant: Open Settings"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "alertMcp",
-          "title": "Alert MCP",
-          "icon": "media/alert.svg"
+          "title": "OEM Assistant",
+          "icon": "media/oem-assistant.svg"
         }
       ]
     },
@@ -78,11 +83,16 @@
           "command": "alertMcp.openConsole",
           "when": "view == alertMcp.sidebar",
           "group": "navigation"
+        },
+        {
+          "command": "alertMcp.openSettings",
+          "when": "view == alertMcp.sidebar",
+          "group": "navigation"
         }
       ]
     },
     "configuration": {
-      "title": "Alert MCP Assistant",
+      "title": "OEM Assistant",
       "properties": {
         "alertMcp.mcp.serverUrl": {
           "type": "string",
@@ -137,6 +147,16 @@
           "minimum": 1,
           "maximum": 8,
           "description": "Maximum model-tool interaction rounds per user request."
+        },
+        "alertMcp.oem.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "OEM platform base URL for enterprise account integration in MVP settings panel."
+        },
+        "alertMcp.oem.username": {
+          "type": "string",
+          "default": "",
+          "description": "OEM platform account username. Password is stored securely via SecretStorage."
         }
       }
     }
@@ -144,12 +164,12 @@
   "scripts": {
     "build": "node ./esbuild.mjs",
     "watch": "node ./esbuild.mjs --watch",
-    "package": "vsce package",
+    "package": "npm run build && vsce package",
     "lint": "tsc --noEmit -p ./"
   },
   "devDependencies": {
     "@types/node": "latest",
-    "@types/vscode": "latest",
+    "@types/vscode": "1.95.0",
     "esbuild": "latest",
     "typescript": "latest",
     "vsce": "latest"
