@@ -47,6 +47,10 @@ export class OpsSidebarProvider implements vscode.TreeDataProvider<SidebarItem> 
         command: 'alertMcp.openConsole',
         title: 'Open Console'
       }),
+      new SidebarItem('Open Settings', 'LLM / OEM / MCP credentials', {
+        command: 'alertMcp.openSettings',
+        title: 'Open Settings'
+      }),
       ...tools.slice(0, 15).map(tool => new SidebarItem(`tool: ${tool.name}`, tool.description ?? ''))
     ]);
   }
