@@ -16,7 +16,8 @@
     "onCommand:alertMcp.openConsole",
     "onCommand:alertMcp.connectMcp",
     "onCommand:alertMcp.askAssistant",
-    "onView:alertMcp.sidebar"
+    "onView:alertMcp.sidebar",
+    "onCommand:alertMcp.openSettings"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -48,6 +49,10 @@
       {
         "command": "alertMcp.disconnectMcp",
         "title": "Alert MCP: Disconnect MCP Server"
+      },
+      {
+        "command": "alertMcp.openSettings",
+        "title": "Alert MCP: Open Settings"
       }
     ],
     "viewsContainers": {
@@ -76,6 +81,11 @@
         },
         {
           "command": "alertMcp.openConsole",
+          "when": "view == alertMcp.sidebar",
+          "group": "navigation"
+        },
+        {
+          "command": "alertMcp.openSettings",
           "when": "view == alertMcp.sidebar",
           "group": "navigation"
         }
@@ -137,6 +147,16 @@
           "minimum": 1,
           "maximum": 8,
           "description": "Maximum model-tool interaction rounds per user request."
+        },
+        "alertMcp.oem.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "OEM platform base URL for enterprise account integration in MVP settings panel."
+        },
+        "alertMcp.oem.username": {
+          "type": "string",
+          "default": "",
+          "description": "OEM platform account username. Password is stored securely via SecretStorage."
         }
       }
     }
