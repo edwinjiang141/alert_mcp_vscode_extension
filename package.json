@@ -164,12 +164,12 @@
   "scripts": {
     "build": "node ./esbuild.mjs",
     "watch": "node ./esbuild.mjs --watch",
-    "package": "vsce package",
+    "package": "npm run build && vsce package",
     "lint": "tsc --noEmit -p ./"
   },
   "devDependencies": {
     "@types/node": "latest",
-    "@types/vscode": "latest",
+    "@types/vscode": "1.95.0",
     "esbuild": "latest",
     "typescript": "latest",
     "vsce": "latest"
