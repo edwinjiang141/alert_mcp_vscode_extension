@@ -10,6 +10,9 @@ const ctx = await esbuild.context({
   platform: 'node',
   target: 'node20',
   external: ['vscode'],
+  alias: {
+    '@cfworker/json-schema': './src/shims/cfworkerJsonSchema.ts'
+  },
   sourcemap: true,
   logLevel: 'info'
 });
