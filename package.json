@@ -1,0 +1,160 @@
+{
+  "name": "alert-mcp-assistant",
+  "displayName": "Alert MCP Assistant",
+  "description": "A focused VS Code extension for alert query and handling with MCP + LLM.",
+  "version": "0.1.0",
+  "publisher": "local-dev",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:alertMcp.openConsole",
+    "onCommand:alertMcp.connectMcp",
+    "onCommand:alertMcp.askAssistant",
+    "onView:alertMcp.sidebar"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "alertMcp.openConsole",
+        "title": "Alert MCP: Open Console"
+      },
+      {
+        "command": "alertMcp.connectMcp",
+        "title": "Alert MCP: Connect MCP Server"
+      },
+      {
+        "command": "alertMcp.askAssistant",
+        "title": "Alert MCP: Ask Assistant"
+      },
+      {
+        "command": "alertMcp.setLlmApiKey",
+        "title": "Alert MCP: Set LLM API Key"
+      },
+      {
+        "command": "alertMcp.setMcpBearerToken",
+        "title": "Alert MCP: Set MCP Bearer Token"
+      },
+      {
+        "command": "alertMcp.refreshSidebar",
+        "title": "Alert MCP: Refresh Sidebar"
+      },
+      {
+        "command": "alertMcp.disconnectMcp",
+        "title": "Alert MCP: Disconnect MCP Server"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "alertMcp",
+          "title": "Alert MCP",
+          "icon": "media/alert.svg"
+        }
+      ]
+    },
+    "views": {
+      "alertMcp": [
+        {
+          "id": "alertMcp.sidebar",
+          "name": "Operations"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "alertMcp.refreshSidebar",
+          "when": "view == alertMcp.sidebar",
+          "group": "navigation"
+        },
+        {
+          "command": "alertMcp.openConsole",
+          "when": "view == alertMcp.sidebar",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Alert MCP Assistant",
+      "properties": {
+        "alertMcp.mcp.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:3000/sse",
+          "description": "MCP server URL. For current legacy servers, use the SSE endpoint URL. In future, this can be changed to the Streamable HTTP endpoint."
+        },
+        "alertMcp.mcp.connectionMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "legacy-sse",
+            "streamable-http"
+          ],
+          "default": "auto",
+          "description": "How the extension connects to the MCP server. auto tries Streamable HTTP first and falls back to legacy SSE."
+        },
+        "alertMcp.mcp.requestTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 5000,
+          "description": "Timeout in milliseconds for MCP tool calls."
+        },
+        "alertMcp.llm.provider": {
+          "type": "string",
+          "enum": [
+            "openai-compatible",
+            "copilot"
+          ],
+          "default": "openai-compatible",
+          "description": "LLM provider mode. MVP should use openai-compatible for DeepSeek and similar services."
+        },
+        "alertMcp.llm.baseUrl": {
+          "type": "string",
+          "default": "https://api.deepseek.com",
+          "description": "Base URL for the OpenAI-compatible chat API provider."
+        },
+        "alertMcp.llm.model": {
+          "type": "string",
+          "default": "deepseek-chat",
+          "description": "Model name. For the first production version, deepseek-chat is the safest default."
+        },
+        "alertMcp.llm.temperature": {
+          "type": "number",
+          "default": 0.1,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "LLM temperature. Use a low value for operations and troubleshooting tasks."
+        },
+        "alertMcp.ui.maxToolRounds": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Maximum model-tool interaction rounds per user request."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.mjs",
+    "watch": "node ./esbuild.mjs --watch",
+    "package": "vsce package",
+    "lint": "tsc --noEmit -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/vscode": "latest",
+    "esbuild": "latest",
+    "typescript": "latest",
+    "vsce": "latest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "latest"
+  }
+}
