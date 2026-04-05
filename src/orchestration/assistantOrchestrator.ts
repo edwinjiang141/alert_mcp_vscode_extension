@@ -18,13 +18,26 @@ export class AssistantOrchestrator {
     private readonly output: vscode.OutputChannel
   ) {}
 
-  async ask(userText: string): Promise<AssistantResult> {
+  async ask(userText: string, conversationContext: ChatTurn[] = []): Promise<AssistantResult> {
     if (!this.mcp.isConnected()) {
       throw new Error('MCP server is not connected. Please connect first.');
     }
 
     if (this.settings.llm.provider === 'copilot') {
       throw new Error('Copilot mode is reserved for a later version. Use openai-compatible for the MVP.');
+    }
+
+    const tools = this.mcp.getCachedTools();
+    const oemPassword = await this.secrets.getOemPassword();
+
+    const directLoginResult = await this.tryHandleDirectOemLogin(userText, tools.map(tool => tool.name), {
+      oemBaseUrl: this.settings.oem.baseUrl,
+      oemUsername: this.settings.oem.username,
+      oemPassword
+    });
+
+    if (directLoginResult) {
+      return directLoginResult;
     }
 
     const apiKey = await this.secrets.getLlmApiKey();
@@ -39,7 +52,6 @@ export class AssistantOrchestrator {
       this.settings.llm.temperature
     );
 
-    const tools = this.mcp.getCachedTools();
     const toolSpecs: OpenAiCompatibleTool[] = tools.map(tool => ({
       type: 'function',
       function: {
@@ -52,7 +64,6 @@ export class AssistantOrchestrator {
       }
     }));
 
-    const oemPassword = await this.secrets.getOemPassword();
     const hasOemCredentials = Boolean(this.settings.oem.baseUrl && this.settings.oem.username && oemPassword);
 
     const systemPrompt = [
@@ -74,6 +85,7 @@ export class AssistantOrchestrator {
     const steps: ExecutionStep[] = [];
     const messages: ChatTurn[] = [
       { role: 'system', content: systemPrompt },
+      ...conversationContext,
       { role: 'user', content: normalizedUserText }
     ];
 
@@ -157,13 +169,66 @@ export class AssistantOrchestrator {
       normalized.includes('登录oem') ||
       normalized.includes('登陆oem') ||
       normalized.includes('login oem') ||
-      normalized.includes('oem login');
+      normalized.includes('oem login') ||
+      normalized === '登录';
 
     if (!isLoginIntent) {
       return false;
     }
 
     return toolNames.some(name => /oem.*login|login.*oem/i.test(name));
+  }
+
+  private async tryHandleDirectOemLogin(
+    userText: string,
+    toolNames: string[],
+    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined }
+  ): Promise<AssistantResult | undefined> {
+    const normalized = userText.trim().toLowerCase();
+    const isDirectLoginRequest =
+      normalized === '登录' ||
+      normalized === '登录oem' ||
+      normalized === '登陆oem' ||
+      normalized === 'login oem' ||
+      normalized === 'oem login';
+
+    if (!isDirectLoginRequest) {
+      return undefined;
+    }
+
+    const loginToolName = toolNames.find(name => /oem.*login|login.*oem/i.test(name));
+    if (!loginToolName) {
+      return {
+        finalText: '未发现可用的 OEM 登录工具（如 oem_login），请先确认 MCP Server 是否已暴露登录工具。',
+        steps: []
+      };
+    }
+
+    if (!creds.oemBaseUrl || !creds.oemUsername || !creds.oemPassword) {
+      return {
+        finalText: 'OEM 凭据未配置完整。请在 Alert MCP Settings 中填写 OEM 地址、账号和密码后重试。',
+        steps: []
+      };
+    }
+
+    const args = this.resolveToolArgs(loginToolName, {}, creds);
+    const toolResult = await this.mcp.callTool(loginToolName, args);
+
+    return {
+      finalText: this.redactSensitiveText(`已使用 Settings 中保存的 OEM 凭据执行登录。${toolResult}`),
+      steps: [
+        {
+          type: 'tool-call',
+          title: `Tool call: ${loginToolName}`,
+          detail: this.redactSensitiveText(JSON.stringify(args, null, 2))
+        },
+        {
+          type: 'tool-result',
+          title: `Tool result: ${loginToolName}`,
+          detail: this.redactSensitiveText(toolResult)
+        }
+      ]
+    };
   }
 
   private resolveToolArgs(
