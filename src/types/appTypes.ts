@@ -16,6 +16,10 @@ export interface ExtensionSettings {
   ui: {
     maxToolRounds: number;
   };
+  oem: {
+    baseUrl: string;
+    username: string;
+  };
 }
 
 export interface AssistantResult {

@@ -69,7 +69,7 @@ export class ChatPanel {
 <body>
   <div class="row">
     <button id="askBtn">Ask</button>
-    <button id="connectBtn">Connect MCP</button>
+    <button id="connectBtn">Connect OEM</button>
   </div>
   <textarea id="input" placeholder="Example: 查询最近2小时所有P1告警，并按对象分组总结。"></textarea>
   <div id="log"></div>
@@ -80,11 +80,25 @@ export class ChatPanel {
     const log = document.getElementById('log');
 
     document.getElementById('askBtn').addEventListener('click', () => {
-      vscode.postMessage({ type: 'ask', payload: input.value });
+      const question = input.value.trim();
+      if (!question) {
+        return;
+      }
+      vscode.postMessage({ type: 'ask', payload: question });
     });
 
     document.getElementById('connectBtn').addEventListener('click', () => {
       vscode.postMessage({ type: 'connect' });
+    });
+
+    input.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        const question = input.value.trim();
+        if (!question) {
+          return;
+        }
+        vscode.postMessage({ type: 'ask', payload: question });
+      }
     });
 
     window.addEventListener('message', event => {
