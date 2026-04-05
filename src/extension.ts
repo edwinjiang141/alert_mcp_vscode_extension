@@ -6,6 +6,7 @@ import { SettingsService } from './services/settingsService';
 import { McpClientService } from './services/mcp/mcpClientService';
 import { ChatPanel } from './views/chatPanel';
 import { OpsSidebarProvider } from './views/opsSidebarProvider';
+import { SettingsPanel } from './views/settingsPanel';
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('Alert MCP Assistant');
@@ -74,18 +75,17 @@ export function activate(context: vscode.ExtensionContext): void {
   const openPanel = (): ChatPanel => {
     panel = ChatPanel.createOrShow(context);
 
-    if (!panelMessageDisposable) {
-      panelMessageDisposable = panel.onDidReceiveMessage(async message => {
-        if (message.type === 'connect') {
-          await connectMcp();
-          return;
-        }
-        if (message.type === 'ask') {
-          await askAssistant(message.payload);
-        }
-      });
-      context.subscriptions.push(panelMessageDisposable);
-    }
+    panelMessageDisposable?.dispose();
+    panelMessageDisposable = panel.onDidReceiveMessage(async message => {
+      if (message.type === 'connect') {
+        await connectMcp();
+        return;
+      }
+      if (message.type === 'ask') {
+        await askAssistant(message.payload);
+      }
+    });
+    context.subscriptions.push(panelMessageDisposable);
 
     return panel;
   };
@@ -101,6 +101,13 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.window.showInformationMessage('MCP server disconnected.');
     }),
     vscode.commands.registerCommand('alertMcp.askAssistant', askAssistant),
+    vscode.commands.registerCommand('alertMcp.showToolDescription', async (toolName: string, toolDescription: string) => {
+      const currentPanel = openPanel();
+      currentPanel.postInfo(`Tool: ${toolName}\n${toolDescription}`);
+    }),
+    vscode.commands.registerCommand('alertMcp.openSettings', async () => {
+      await SettingsPanel.createOrShow(context, settingsService, secrets);
+    }),
     vscode.commands.registerCommand('alertMcp.setLlmApiKey', async () => {
       await promptAndStoreLlmApiKey(secrets);
     }),

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 export class SecretStorageService {
   private static readonly LLM_API_KEY = 'alertMcp.llm.apiKey';
   private static readonly MCP_BEARER_TOKEN = 'alertMcp.mcp.bearerToken';
+  private static readonly OEM_PASSWORD = 'alertMcp.oem.password';
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -21,4 +22,12 @@ export class SecretStorageService {
   async setMcpBearerToken(value: string): Promise<void> {
     await this.context.secrets.store(SecretStorageService.MCP_BEARER_TOKEN, value);
   }
+  async getOemPassword(): Promise<string | undefined> {
+    return this.context.secrets.get(SecretStorageService.OEM_PASSWORD);
+  }
+
+  async setOemPassword(value: string): Promise<void> {
+    await this.context.secrets.store(SecretStorageService.OEM_PASSWORD, value);
+  }
 }
+
