@@ -6,6 +6,8 @@ import { SettingsService } from './services/settingsService';
 import { McpClientService } from './services/mcp/mcpClientService';
 import { ChatPanel } from './views/chatPanel';
 import { OpsSidebarProvider } from './views/opsSidebarProvider';
+import { SettingsPanel } from './views/settingsPanel';
+import type { ChatTurn } from './types/appTypes';
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('Alert MCP Assistant');
@@ -21,6 +23,22 @@ export function activate(context: vscode.ExtensionContext): void {
 
   let panel: ChatPanel | undefined;
   let panelMessageDisposable: vscode.Disposable | undefined;
+  const sessionContext: ChatTurn[] = [];
+  const MAX_SESSION_CONTEXT_CHARS = 128 * 1024;
+
+
+  const trimSessionContext = (): void => {
+    let total = sessionContext.reduce((sum, turn) => sum + turn.content.length, 0);
+    while (total > MAX_SESSION_CONTEXT_CHARS && sessionContext.length > 2) {
+      const removed = sessionContext.shift();
+      total -= removed?.content.length ?? 0;
+    }
+  };
+
+  const pushSessionTurn = (turn: ChatTurn): void => {
+    sessionContext.push(turn);
+    trimSessionContext();
+  };
 
   const connectMcp = async (): Promise<void> => {
     const settings = settingsService.get();
@@ -59,10 +77,12 @@ export function activate(context: vscode.ExtensionContext): void {
           location: vscode.ProgressLocation.Notification,
           title: 'Running alert assistant...'
         },
-        async () => orchestrator.ask(userQuestion)
+        async () => orchestrator.ask(userQuestion, sessionContext)
       );
 
       currentPanel.postAssistantResult(userQuestion, result);
+      pushSessionTurn({ role: 'user', content: userQuestion });
+      pushSessionTurn({ role: 'assistant', content: result.finalText });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       output.appendLine(`[ERROR] ${message}`);
@@ -74,18 +94,17 @@ export function activate(context: vscode.ExtensionContext): void {
   const openPanel = (): ChatPanel => {
     panel = ChatPanel.createOrShow(context);
 
-    if (!panelMessageDisposable) {
-      panelMessageDisposable = panel.onDidReceiveMessage(async message => {
-        if (message.type === 'connect') {
-          await connectMcp();
-          return;
-        }
-        if (message.type === 'ask') {
-          await askAssistant(message.payload);
-        }
-      });
-      context.subscriptions.push(panelMessageDisposable);
-    }
+    panelMessageDisposable?.dispose();
+    panelMessageDisposable = panel.onDidReceiveMessage(async message => {
+      if (message.type === 'connect') {
+        await connectMcp();
+        return;
+      }
+      if (message.type === 'ask') {
+        await askAssistant(message.payload);
+      }
+    });
+    context.subscriptions.push(panelMessageDisposable);
 
     return panel;
   };
@@ -97,10 +116,20 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('alertMcp.connectMcp', connectMcp),
     vscode.commands.registerCommand('alertMcp.disconnectMcp', async () => {
       await mcpService.disconnect();
+      sessionContext.length = 0;
       sidebar.refresh();
       vscode.window.showInformationMessage('MCP server disconnected.');
     }),
     vscode.commands.registerCommand('alertMcp.askAssistant', askAssistant),
+    vscode.commands.registerCommand('alertMcp.showToolDescription', async (toolName: string, toolDescription: string) => {
+      const safeDescription = toolDescription || 'No description from MCP server.';
+      vscode.window.showInformationMessage(`${toolName}: ${safeDescription}`);
+      const currentPanel = openPanel();
+      currentPanel.postInfo(`Tool: ${toolName}\n${safeDescription}`);
+    }),
+    vscode.commands.registerCommand('alertMcp.openSettings', async () => {
+      await SettingsPanel.createOrShow(context, settingsService, secrets);
+    }),
     vscode.commands.registerCommand('alertMcp.setLlmApiKey', async () => {
       await promptAndStoreLlmApiKey(secrets);
     }),
