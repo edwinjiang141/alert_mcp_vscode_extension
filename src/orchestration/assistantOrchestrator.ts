@@ -40,11 +40,16 @@ export class AssistantOrchestrator {
 
     const oemPassword = await this.secrets.getOemPassword();
 
-    const directLoginResult = await this.tryHandleDirectOemLogin(userText, allToolNames, {
-      oemBaseUrl: this.settings.oem.baseUrl,
-      oemUsername: this.settings.oem.username,
-      oemPassword
-    });
+    const directLoginResult = await this.tryHandleDirectOemLogin(
+      userText,
+      allToolNames,
+      {
+        oemBaseUrl: this.settings.oem.baseUrl,
+        oemUsername: this.settings.oem.username,
+        oemPassword
+      },
+      preferredToolNames
+    );
 
     if (directLoginResult) {
       return directLoginResult;
@@ -251,6 +256,8 @@ export class AssistantOrchestrator {
       normalized.includes('登陆oem') ||
       normalized.includes('login oem') ||
       normalized.includes('oem login') ||
+      normalized.includes('@oem_login') ||
+      normalized.includes('oem_login') ||
       normalized === '登录';
 
     if (!isLoginIntent) {
@@ -263,21 +270,27 @@ export class AssistantOrchestrator {
   private async tryHandleDirectOemLogin(
     userText: string,
     toolNames: string[],
-    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined }
+    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined },
+    preferredToolNames: string[]
   ): Promise<AssistantResult | undefined> {
     const normalized = userText.trim().toLowerCase();
+    const mentionedLoginTool = preferredToolNames.find(name => /oem.*login|login.*oem/i.test(name));
+    const loginToolName = mentionedLoginTool ?? toolNames.find(name => /oem.*login|login.*oem/i.test(name));
+
     const isDirectLoginRequest =
       normalized === '登录' ||
       normalized === '登录oem' ||
       normalized === '登陆oem' ||
       normalized === 'login oem' ||
-      normalized === 'oem login';
+      normalized === 'oem login' ||
+      normalized.includes('@oem_login') ||
+      normalized.includes(' oem_login') ||
+      Boolean(mentionedLoginTool);
 
     if (!isDirectLoginRequest) {
       return undefined;
     }
 
-    const loginToolName = toolNames.find(name => /oem.*login|login.*oem/i.test(name));
     if (!loginToolName) {
       return {
         finalText: '未发现可用的 OEM 登录工具（如 oem_login），请先确认 MCP Server 是否已暴露登录工具。',
