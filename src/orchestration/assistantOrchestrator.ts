@@ -52,18 +52,29 @@ export class AssistantOrchestrator {
       }
     }));
 
+    const oemPassword = await this.secrets.getOemPassword();
+    const hasOemCredentials = Boolean(this.settings.oem.baseUrl && this.settings.oem.username && oemPassword);
+
     const systemPrompt = [
       'You are a focused alert operations assistant.',
       'Use MCP tools when you need live alert data or operational actions.',
       'For destructive or risky actions, explain intent clearly before taking action.',
-      'Keep answers concise, factual, and operationally useful.',
+      'Never expose secrets, passwords, tokens, usernames, or private endpoints in your final response.',
+      hasOemCredentials
+        ? 'OEM credentials are already configured in extension settings. For OEM login requests, call login tool directly without asking credentials again.'
+        : 'OEM credentials are incomplete. If login is requested, ask user to complete OEM settings first.',
       this.mcp.getInstructions()
     ].filter(Boolean).join('\n\n');
+
+    const shouldForceOemLogin = this.shouldForceOemLoginFirst(userText, tools.map(tool => tool.name));
+    const normalizedUserText = shouldForceOemLogin
+      ? `${userText}\n\n请先调用 OEM 登录工具完成会话建立，然后再继续后续任务，不要重复要求用户输入 OEM 账号密码。`
+      : userText;
 
     const steps: ExecutionStep[] = [];
     const messages: ChatTurn[] = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userText }
+      { role: 'user', content: normalizedUserText }
     ];
 
     for (let round = 0; round < this.settings.ui.maxToolRounds; round += 1) {
@@ -80,10 +91,10 @@ export class AssistantOrchestrator {
         steps.push({
           type: 'info',
           title: 'Final answer',
-          detail: llmReply.content ?? '(empty response)'
+          detail: this.redactSensitiveText(llmReply.content ?? '(empty response)')
         });
         return {
-          finalText: llmReply.content ?? '(empty response)',
+          finalText: this.redactSensitiveText(llmReply.content ?? '(empty response)'),
           steps
         };
       }
@@ -99,24 +110,30 @@ export class AssistantOrchestrator {
           parsedArgs = { raw: rawArgs };
         }
 
+        const resolvedArgs = this.resolveToolArgs(toolName, parsedArgs, {
+          oemBaseUrl: this.settings.oem.baseUrl,
+          oemUsername: this.settings.oem.username,
+          oemPassword
+        });
+
         steps.push({
           type: 'tool-call',
           title: `Tool call: ${toolName}`,
-          detail: JSON.stringify(parsedArgs, null, 2)
+          detail: this.redactSensitiveText(JSON.stringify(resolvedArgs, null, 2))
         });
 
-        const toolResult = await this.mcp.callTool(toolName, parsedArgs);
+        const toolResult = await this.mcp.callTool(toolName, resolvedArgs);
         steps.push({
           type: 'tool-result',
           title: `Tool result: ${toolName}`,
-          detail: toolResult
+          detail: this.redactSensitiveText(toolResult)
         });
 
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
           name: toolName,
-          content: toolResult
+          content: this.redactSensitiveText(toolResult)
         });
       }
     }
@@ -132,5 +149,58 @@ export class AssistantOrchestrator {
       finalText: overflowMessage,
       steps
     };
+  }
+
+  private shouldForceOemLoginFirst(userText: string, toolNames: string[]): boolean {
+    const normalized = userText.toLowerCase();
+    const isLoginIntent =
+      normalized.includes('登录oem') ||
+      normalized.includes('登陆oem') ||
+      normalized.includes('login oem') ||
+      normalized.includes('oem login');
+
+    if (!isLoginIntent) {
+      return false;
+    }
+
+    return toolNames.some(name => /oem.*login|login.*oem/i.test(name));
+  }
+
+  private resolveToolArgs(
+    toolName: string,
+    args: Record<string, unknown>,
+    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined }
+  ): Record<string, unknown> {
+    if (!/oem.*login|login.*oem/i.test(toolName)) {
+      return args;
+    }
+
+    const updated = { ...args };
+    if (creds.oemBaseUrl) {
+      updated.oem_base_url = creds.oemBaseUrl;
+      updated.base_url = creds.oemBaseUrl;
+      updated.baseUrl = creds.oemBaseUrl;
+    }
+    if (creds.oemUsername) {
+      updated.username = creds.oemUsername;
+      updated.user = creds.oemUsername;
+      updated.account = creds.oemUsername;
+    }
+    if (creds.oemPassword) {
+      updated.password = creds.oemPassword;
+      updated.pass = creds.oemPassword;
+      updated.pwd = creds.oemPassword;
+    }
+
+    return updated;
+  }
+
+  private redactSensitiveText(input: string): string {
+    return input
+      .replace(/(password\s*[=:]\s*)([^\s,\n]+)/gi, '$1***')
+      .replace(/(密码\s*[：:=]\s*)([^\s,\n]+)/g, '$1***')
+      .replace(/(username\s*[=:]\s*)([^\s,\n]+)/gi, '$1***')
+      .replace(/(用户名\s*[：:=]\s*)([^\s,\n]+)/g, '$1***')
+      .replace(/(https?:\/\/[^\s]*\/em\/api)/gi, '[OEM_API_REDACTED]');
   }
 }

@@ -101,6 +101,10 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.window.showInformationMessage('MCP server disconnected.');
     }),
     vscode.commands.registerCommand('alertMcp.askAssistant', askAssistant),
+    vscode.commands.registerCommand('alertMcp.showToolDescription', async (toolName: string, toolDescription: string) => {
+      const currentPanel = openPanel();
+      currentPanel.postInfo(`Tool: ${toolName}\n${toolDescription}`);
+    }),
     vscode.commands.registerCommand('alertMcp.openSettings', async () => {
       await SettingsPanel.createOrShow(context, settingsService, secrets);
     }),

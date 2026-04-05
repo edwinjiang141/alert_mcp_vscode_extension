@@ -3,10 +3,19 @@ import { McpClientService } from '../services/mcp/mcpClientService';
 import { SettingsService } from '../services/settingsService';
 
 class SidebarItem extends vscode.TreeItem {
-  constructor(label: string, description?: string, command?: vscode.Command) {
-    super(label, vscode.TreeItemCollapsibleState.None);
-    this.description = description;
-    this.command = command;
+  constructor(
+    label: string,
+    options?: {
+      description?: string;
+      command?: vscode.Command;
+      collapsibleState?: vscode.TreeItemCollapsibleState;
+      contextValue?: string;
+    }
+  ) {
+    super(label, options?.collapsibleState ?? vscode.TreeItemCollapsibleState.None);
+    this.description = options?.description;
+    this.command = options?.command;
+    this.contextValue = options?.contextValue;
   }
 }
 
@@ -27,35 +36,63 @@ export class OpsSidebarProvider implements vscode.TreeDataProvider<SidebarItem> 
     return element;
   }
 
-  getChildren(): Thenable<SidebarItem[]> {
+  getChildren(element?: SidebarItem): Thenable<SidebarItem[]> {
     const settings = this.settingsService.get();
     const tools = this.mcp.getCachedTools();
+
+    if (element?.contextValue === 'available-tools') {
+      if (tools.length === 0) {
+        return Promise.resolve([
+          new SidebarItem('No tools discovered yet', {
+            description: 'Connect MCP and refresh to load tool metadata.'
+          })
+        ]);
+      }
+
+      return Promise.resolve(
+        tools.slice(0, 30).map(tool => new SidebarItem(tool.name, {
+          description: tool.description ?? 'No description from MCP server.',
+          command: {
+            command: 'alertMcp.showToolDescription',
+            title: 'Show Tool Description',
+            arguments: [tool.name, tool.description ?? 'No description from MCP server.']
+          }
+        }))
+      );
+    }
 
     return Promise.resolve([
       new SidebarItem(
         this.mcp.isConnected() ? 'MCP: Connected' : 'MCP: Disconnected',
-        this.mcp.getConnectedUrl() ?? settings.mcp.serverUrl,
         {
-          command: this.mcp.isConnected() ? 'alertMcp.disconnectMcp' : 'alertMcp.connectMcp',
-          title: 'Toggle MCP Connection'
+          description: this.mcp.getConnectedUrl() ?? settings.mcp.serverUrl,
+          command: {
+            command: this.mcp.isConnected() ? 'alertMcp.disconnectMcp' : 'alertMcp.connectMcp',
+            title: 'Toggle MCP Connection'
+          }
         }
       ),
-      new SidebarItem('LLM Provider', settings.llm.provider),
-      new SidebarItem('LLM Model', settings.llm.model),
-      new SidebarItem('Available Tools', `${tools.length}`),
-      new SidebarItem('Open Console', 'Chat + execution view', {
-        command: 'alertMcp.openConsole',
-        title: 'Open Console'
+      new SidebarItem('LLM Provider', { description: settings.llm.provider }),
+      new SidebarItem('LLM Model', { description: settings.llm.model }),
+      new SidebarItem('Available Tools', {
+        description: `${tools.length}`,
+        collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+        contextValue: 'available-tools'
       }),
-      new SidebarItem('Open Settings', 'LLM / OEM / MCP credentials', {
-        command: 'alertMcp.openSettings',
-        title: 'Open Settings'
+      new SidebarItem('Open Console', {
+        description: 'Chat + tool execution view',
+        command: {
+          command: 'alertMcp.openConsole',
+          title: 'Open Console'
+        }
       }),
-      ...tools.slice(0, 15).map(tool => new SidebarItem(`tool: ${tool.name}`, tool.description ?? '', {
-        command: 'alertMcp.askAssistant',
-        title: 'Ask with Tool',
-        arguments: [`请调用工具 ${tool.name}，并基于返回结果给出处置建议。`]
-      }))
+      new SidebarItem('Open Settings', {
+        description: 'LLM / OEM / MCP credentials',
+        command: {
+          command: 'alertMcp.openSettings',
+          title: 'Open Settings'
+        }
+      })
     ]);
   }
 }
