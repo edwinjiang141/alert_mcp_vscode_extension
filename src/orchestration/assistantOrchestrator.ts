@@ -40,6 +40,20 @@ export class AssistantOrchestrator {
 
     const oemPassword = await this.secrets.getOemPassword();
 
+    const chainedToolResult = await this.tryRunPreferredToolChain(
+      userText,
+      preferredToolNames,
+      allToolNames,
+      {
+        oemBaseUrl: this.settings.oem.baseUrl,
+        oemUsername: this.settings.oem.username,
+        oemPassword
+      }
+    );
+    if (chainedToolResult) {
+      return chainedToolResult;
+    }
+
     const directLoginResult = await this.tryHandleDirectOemLogin(
       userText,
       allToolNames,
@@ -219,6 +233,102 @@ export class AssistantOrchestrator {
       .map(name => name.trim())
       .filter(Boolean)
       .filter(name => allowed.has(name));
+  }
+
+  private async tryRunPreferredToolChain(
+    userText: string,
+    preferredToolNames: string[],
+    allToolNames: string[],
+    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined }
+  ): Promise<AssistantResult | undefined> {
+    if (preferredToolNames.length < 2) {
+      return undefined;
+    }
+
+    const available = new Set(allToolNames);
+    const steps: ExecutionStep[] = [];
+    let lastResult = '';
+
+    for (const toolName of preferredToolNames) {
+      if (!available.has(toolName)) {
+        return {
+          finalText: `工具 ${toolName} 不存在或当前不可用，请先刷新 MCP 工具列表后重试。`,
+          steps
+        };
+      }
+
+      let args: Record<string, unknown> = this.buildDefaultToolArgs(userText);
+      if (/oem.*login|login.*oem/i.test(toolName)) {
+        if (!creds.oemBaseUrl || !creds.oemUsername || !creds.oemPassword) {
+          return {
+            finalText: 'OEM 凭据未配置完整。请先在 Settings 中补全 OEM 地址、账号与密码。',
+            steps
+          };
+        }
+        args = this.resolveToolArgs(toolName, {}, creds);
+      }
+
+      steps.push({
+        type: 'tool-call',
+        title: `Tool call: ${toolName}`,
+        detail: this.redactSensitiveText(JSON.stringify(args, null, 2))
+      });
+
+      try {
+        lastResult = await this.mcp.callTool(toolName, args);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        steps.push({
+          type: 'error',
+          title: `Tool failed: ${toolName}`,
+          detail: this.redactSensitiveText(message)
+        });
+        return {
+          finalText: `工具 ${toolName} 执行失败，后续链路已停止。请先满足该工具执行条件后再继续。`,
+          steps
+        };
+      }
+
+      const safeResult = this.redactSensitiveText(lastResult);
+      steps.push({
+        type: 'tool-result',
+        title: `Tool result: ${toolName}`,
+        detail: safeResult
+      });
+
+      if (this.looksLikePrerequisiteFailure(lastResult)) {
+        return {
+          finalText: `工具 ${toolName} 未满足前置条件，已按顺序停止后续 @ 命令。请根据返回信息先完成前置条件后再继续。`,
+          steps
+        };
+      }
+    }
+
+    return {
+      finalText: this.redactSensitiveText(lastResult || '已按顺序完成所有 @ 工具调用。'),
+      steps
+    };
+  }
+
+  private buildDefaultToolArgs(userText: string): Record<string, unknown> {
+    return {
+      query: userText,
+      question: userText,
+      input: userText,
+      text: userText
+    };
+  }
+
+  private looksLikePrerequisiteFailure(toolResult: string): boolean {
+    const normalized = toolResult.toLowerCase();
+    return normalized.includes('"ok": false')
+      || normalized.includes('"success": false')
+      || normalized.includes('not login')
+      || normalized.includes('未登录')
+      || normalized.includes('请先')
+      || normalized.includes('需要先')
+      || normalized.includes('missing required')
+      || normalized.includes('前置条件');
   }
 
   private shouldForceAskOps(userText: string, toolNames: string[]): boolean {
