@@ -1,4 +1,4 @@
-# Alert MCP Assistant for VS Code
+# OEM Assistant for VS Code
 
 一个面向“告警查询与处理”场景的专用 VS Code 插件骨架。
 
@@ -151,10 +151,10 @@ npm run build
 ### 6.3 初始化配置
 
 在扩展宿主里执行命令：
-- `Alert MCP: Set LLM API Key`
-- `Alert MCP: Set MCP Bearer Token`（如果需要）
-- `Alert MCP: Connect MCP Server`
-- `Alert MCP: Open Console`
+- `OEM Assistant: Set LLM API Key`
+- `OEM Assistant: Set MCP Bearer Token`（如果需要）
+- `OEM Assistant: Connect MCP Server`
+- `OEM Assistant: Open Console`
 
 ### 6.4 建议的初始 settings.json
 
