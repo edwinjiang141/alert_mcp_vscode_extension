@@ -52,7 +52,7 @@ export class McpClientService {
 
     const createClient = () =>
       new Client({
-        name: 'alert-mcp-assistant',
+        name: 'oem-assistant',
         version: '0.1.0'
       });
 
