@@ -268,7 +268,7 @@ export class AssistantOrchestrator {
     creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined },
     sessionIdFromContext?: string
   ): Promise<AssistantResult | undefined> {
-    if (preferredToolNames.length < 2) {
+    if (preferredToolNames.length < 1) {
       return undefined;
     }
 
@@ -421,14 +421,19 @@ export class AssistantOrchestrator {
       return false;
     }
     const normalized = userText.toLowerCase();
-    const hasAlertIntent =
+    const hasAlertKeyword =
       normalized.includes('告警') ||
       normalized.includes('alert') ||
+      normalized.includes('alarm') ||
       normalized.includes('cpu') ||
-      normalized.includes('主机') ||
-      normalized.includes('诊断');
+      normalized.includes('io');
+    const hasDiagnosisKeyword =
+      normalized.includes('诊断') ||
+      normalized.includes('分析') ||
+      normalized.includes('处置') ||
+      normalized.includes('处理');
 
-    return hasAlertIntent;
+    return hasAlertKeyword && hasDiagnosisKeyword;
   }
 
   private hasAskOpsExecution(steps: ExecutionStep[]): boolean {
