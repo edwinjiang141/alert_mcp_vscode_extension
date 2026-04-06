@@ -18,6 +18,10 @@ export class SettingsService {
       },
       ui: {
         maxToolRounds: config.get<number>('ui.maxToolRounds', 4)
+      },
+      oem: {
+        baseUrl: config.get<string>('oem.baseUrl', ''),
+        username: config.get<string>('oem.username', '')
       }
     };
   }
