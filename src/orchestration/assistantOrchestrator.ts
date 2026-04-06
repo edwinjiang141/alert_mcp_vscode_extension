@@ -12,6 +12,7 @@ import { McpClientService } from '../services/mcp/mcpClientService';
 
 interface AskOptions {
   preferredTools?: string[];
+  oemSessionId?: string;
 }
 
 export class AssistantOrchestrator {
@@ -48,7 +49,8 @@ export class AssistantOrchestrator {
         oemBaseUrl: this.settings.oem.baseUrl,
         oemUsername: this.settings.oem.username,
         oemPassword
-      }
+      },
+      options.oemSessionId
     );
     if (chainedToolResult) {
       return chainedToolResult;
@@ -173,7 +175,7 @@ export class AssistantOrchestrator {
           oemBaseUrl: this.settings.oem.baseUrl,
           oemUsername: this.settings.oem.username,
           oemPassword
-        });
+        }, options.oemSessionId);
 
         steps.push({
           type: 'tool-call',
@@ -263,7 +265,8 @@ export class AssistantOrchestrator {
     userText: string,
     preferredToolNames: string[],
     allToolNames: string[],
-    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined }
+    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined },
+    sessionIdFromContext?: string
   ): Promise<AssistantResult | undefined> {
     if (preferredToolNames.length < 2) {
       return undefined;
@@ -273,6 +276,7 @@ export class AssistantOrchestrator {
     const steps: ExecutionStep[] = [];
     let lastResult = '';
     const chainContext: Record<string, unknown> = {};
+    const authContext = this.buildToolAuthContext(creds, sessionIdFromContext);
 
     for (const toolName of preferredToolNames) {
       if (!available.has(toolName)) {
@@ -282,7 +286,10 @@ export class AssistantOrchestrator {
         };
       }
 
-      let args: Record<string, unknown> = this.buildDefaultToolArgs(userText, chainContext);
+      let args: Record<string, unknown> = this.buildDefaultToolArgs(userText, {
+        ...authContext,
+        ...chainContext
+      });
       if (/oem.*login|login.*oem/i.test(toolName)) {
         if (!creds.oemBaseUrl || !creds.oemUsername || !creds.oemPassword) {
           return {
@@ -349,6 +356,34 @@ export class AssistantOrchestrator {
       text: userText,
       ...chainContext
     };
+  }
+
+  private buildToolAuthContext(
+    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined },
+    sessionId?: string
+  ): Record<string, unknown> {
+    const context: Record<string, unknown> = {};
+    if (sessionId) {
+      context.session_id = sessionId;
+      context.sessionId = sessionId;
+    }
+
+    if (creds.oemBaseUrl) {
+      context.oem_base_url = creds.oemBaseUrl;
+      context.base_url = creds.oemBaseUrl;
+      context.baseUrl = creds.oemBaseUrl;
+    }
+    if (creds.oemUsername) {
+      context.username = creds.oemUsername;
+      context.user = creds.oemUsername;
+      context.account = creds.oemUsername;
+    }
+    if (creds.oemPassword) {
+      context.password = creds.oemPassword;
+      context.pass = creds.oemPassword;
+      context.pwd = creds.oemPassword;
+    }
+    return context;
   }
 
   private tryExtractSessionId(toolResult: string): string | undefined {
@@ -488,13 +523,18 @@ export class AssistantOrchestrator {
   private resolveToolArgs(
     toolName: string,
     args: Record<string, unknown>,
-    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined }
+    creds: { oemBaseUrl: string; oemUsername: string; oemPassword: string | undefined },
+    sessionId?: string
   ): Record<string, unknown> {
+    const updated = { ...args };
+
+    const authContext = this.buildToolAuthContext(creds, sessionId);
+    Object.assign(updated, authContext);
+
     if (!/oem.*login|login.*oem/i.test(toolName)) {
-      return args;
+      return updated;
     }
 
-    const updated = { ...args };
     if (creds.oemBaseUrl) {
       updated.oem_base_url = creds.oemBaseUrl;
       updated.base_url = creds.oemBaseUrl;

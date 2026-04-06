@@ -30,6 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let panelMessageDisposable: vscode.Disposable | undefined;
   const sessionContext: ChatTurn[] = [];
   const MAX_SESSION_CONTEXT_CHARS = 128 * 1024;
+  let oemSessionId: string | undefined;
 
   const trimSessionContext = (): void => {
     let total = sessionContext.reduce((sum, turn) => sum + turn.content.length, 0);
@@ -100,13 +101,15 @@ export function activate(context: vscode.ExtensionContext): void {
           title: 'Running alert assistant...'
         },
         async () => orchestrator.ask(userQuestion, sessionContext, {
-          preferredTools: parsedPayload?.preferredTools ?? []
+          preferredTools: parsedPayload?.preferredTools ?? [],
+          oemSessionId
         })
       );
 
       currentPanel.postAssistantResult(userQuestion, result);
       pushSessionTurn({ role: 'user', content: userQuestion });
       pushSessionTurn({ role: 'assistant', content: result.finalText });
+      oemSessionId = extractSessionId(result.finalText) ?? extractSessionId(result.steps.map(step => step.detail).join('\n')) ?? oemSessionId;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       output.appendLine(`[ERROR] ${message}`);
@@ -142,6 +145,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('alertMcp.disconnectMcp', async () => {
       await mcpService.disconnect();
       sessionContext.length = 0;
+      oemSessionId = undefined;
       sidebar.refresh();
       syncPanelToolCatalog();
       vscode.window.showInformationMessage('MCP server disconnected.');
@@ -180,4 +184,19 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }
   );
+}
+
+function extractSessionId(text: string): string | undefined {
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const direct = parsed.session_id ?? parsed.sessionId;
+    if (typeof direct === 'string' && direct.trim()) {
+      return direct.trim();
+    }
+  } catch {
+    // ignore parse errors and fallback to regex
+  }
+
+  const match = /"session_id"\s*:\s*"([^"]+)"/i.exec(text);
+  return match?.[1];
 }
