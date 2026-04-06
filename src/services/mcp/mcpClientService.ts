@@ -52,7 +52,7 @@ export class McpClientService {
 
     const createClient = () =>
       new Client({
-        name: 'alert-mcp-assistant',
+        name: 'oem-assistant',
         version: '0.1.0'
       });
 
@@ -125,7 +125,12 @@ export class McpClientService {
       .filter(Boolean);
 
     if (response.structuredContent) {
-      textParts.push(`\n[structuredContent]\n${JSON.stringify(response.structuredContent, null, 2)}`);
+      const structured = JSON.stringify(response.structuredContent, null, 2);
+      const current = textParts.join('\n');
+      const alreadyIncluded = current.includes(structured);
+      if (!alreadyIncluded) {
+        textParts.push(`\n[structuredContent]\n${structured}`);
+      }
     }
 
     const result = textParts.join('\n');
