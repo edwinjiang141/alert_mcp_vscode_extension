@@ -33,7 +33,7 @@ export class AssistantOrchestrator {
 
     const allTools = this.mcp.getCachedTools();
     const allToolNames = allTools.map(tool => tool.name);
-    const preferredToolNames = this.normalizePreferredTools(options.preferredTools, allToolNames);
+    const preferredToolNames = this.resolvePreferredTools(userText, options.preferredTools, allToolNames);
     const activeTools = preferredToolNames.length > 0
       ? allTools.filter(tool => preferredToolNames.includes(tool.name))
       : allTools;
@@ -224,6 +224,30 @@ export class AssistantOrchestrator {
     };
   }
 
+  private resolvePreferredTools(userText: string, preferredTools: string[] | undefined, allTools: string[]): string[] {
+    const mentionOrder = this.extractMentionedToolsInOrder(userText, allTools);
+    if (mentionOrder.length > 0) {
+      return mentionOrder;
+    }
+
+    return this.normalizePreferredTools(preferredTools, allTools);
+  }
+
+  private extractMentionedToolsInOrder(userText: string, allTools: string[]): string[] {
+    const allowed = new Set(allTools);
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+    for (const match of userText.matchAll(/@([a-zA-Z0-9_:-]+)/g)) {
+      const name = match[1];
+      if (!name || !allowed.has(name) || seen.has(name)) {
+        continue;
+      }
+      seen.add(name);
+      ordered.push(name);
+    }
+    return ordered;
+  }
+
   private normalizePreferredTools(preferredTools: string[] | undefined, allTools: string[]): string[] {
     if (!preferredTools?.length) {
       return [];
@@ -248,6 +272,7 @@ export class AssistantOrchestrator {
     const available = new Set(allToolNames);
     const steps: ExecutionStep[] = [];
     let lastResult = '';
+    const chainContext: Record<string, unknown> = {};
 
     for (const toolName of preferredToolNames) {
       if (!available.has(toolName)) {
@@ -257,7 +282,7 @@ export class AssistantOrchestrator {
         };
       }
 
-      let args: Record<string, unknown> = this.buildDefaultToolArgs(userText);
+      let args: Record<string, unknown> = this.buildDefaultToolArgs(userText, chainContext);
       if (/oem.*login|login.*oem/i.test(toolName)) {
         if (!creds.oemBaseUrl || !creds.oemUsername || !creds.oemPassword) {
           return {
@@ -296,6 +321,12 @@ export class AssistantOrchestrator {
         detail: safeResult
       });
 
+      const sessionId = this.tryExtractSessionId(lastResult);
+      if (sessionId) {
+        chainContext.session_id = sessionId;
+        chainContext.sessionId = sessionId;
+      }
+
       if (this.looksLikePrerequisiteFailure(lastResult)) {
         return {
           finalText: `工具 ${toolName} 未满足前置条件，已按顺序停止后续 @ 命令。请根据返回信息先完成前置条件后再继续。`,
@@ -310,13 +341,32 @@ export class AssistantOrchestrator {
     };
   }
 
-  private buildDefaultToolArgs(userText: string): Record<string, unknown> {
+  private buildDefaultToolArgs(userText: string, chainContext: Record<string, unknown>): Record<string, unknown> {
     return {
       query: userText,
       question: userText,
       input: userText,
-      text: userText
+      text: userText,
+      ...chainContext
     };
+  }
+
+  private tryExtractSessionId(toolResult: string): string | undefined {
+    try {
+      const parsed = JSON.parse(toolResult) as Record<string, unknown>;
+      const direct = parsed.session_id ?? parsed.sessionId;
+      if (typeof direct === 'string' && direct.trim()) {
+        return direct.trim();
+      }
+    } catch {
+      // ignore parse errors and fallback to regex below
+    }
+
+    const regexMatch = /"session_id"\s*:\s*"([^"]+)"/i.exec(toolResult);
+    if (regexMatch?.[1]) {
+      return regexMatch[1];
+    }
+    return undefined;
   }
 
   private looksLikePrerequisiteFailure(toolResult: string): boolean {
